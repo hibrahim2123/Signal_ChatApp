@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="libraries/signalr.min.js"></script>
+    <script src="libraries/jquery.min.js"></script>
+    <script src="libraries/bootstrap.min.js"></script>
+    <link rel="stylesheet" href="libraries/bootstrap.min.css" />
+    <script>
+      $(document).ready(() => {
+        const connection = new signalR.HubConnectionBuilder()
+          .withUrl("https://localhost:7173/chathub")
+          .build();
+
+        connection.start();
+
+        $(".disabledElements").attr("disabled", "disabled");
+
+        $("body").on("click", ".users", function () {
+          $(".users").each((index, item) => {
+            item.classList.remove("active");
+          });
+          $(this).addClass("active");
+        });
+
+        $("#btnGirisYap").click(() => {
+          const nickName = $("#txtNickName").val();
+          connection
+            .invoke("GetNickName", nickName)
+            .catch((error) => console.log(error));
+
+          $(".disabledElements").removeAttr("disabled");
+        });
+
+        connection.on("clientJoined", (nickName) => {
+          $("#clientDurumMesajlari").html(`${nickName} giris yapti`);
+          $("#clientDurumMesajlari").fadeIn(2000, () => {
+            setTimeout(() => {
+              $("#clientDurumMesajlari").fadeOut(2000);
+            }, 2000);
+          });
+        });
+
+        connection.on("clients", (clients) => {
+          $("#_clients").html("");
+          $.each(clients, (index, item) => {
+            const user = $(".users").first().clone();
+            user.removeClass("active");
+            user.html(item.nickName);
+            $("#_clients").append(user);
+          });
+        });
+
+        connection.on("receiveMessage", (message, nickName) => {
+          const _message = $(".message").first().clone();
+          _message.find("p").html(message);
+          _message.find("h5")[0].innerHTML = nickName;
+
+          $(".messages").append(_message);
+        });
+
+        $("#btnGonder").click(() => {
+          const clientName = $(".users.active").first().html();
+          const message = $("#txtMesaj").val();
+          connection.invoke("SendMessageAsync", message, clientName);
+
+          const _message = $(".message").clone();
+          _message.removeClass("message");
+          _message.find("p").html(message);
+
+          _message.find("h5")[0].innerHTML = "Sen";
+          $(".messages").append(_message);
+        });
+
+        $("#btnOdaOlustur").click(() => {
+          connection.invoke("AddGroup", $("#txtOdaAdi").val());
+        });
+        connection.on("groups", (myGroups) => {
+          let options = `<option selected value="-1">Odalar</option>`;
+          $.each(myGroups, (index, item) => {
+            options += `<option value=${item.groupName}>${item.groupName}</option>`;
+          });
+          $(".rooms").html("");
+          $(".rooms").append(options);
+        });
+
+        $("#btnOdalaraGir").click(() => {
+          let groupNames = [];
+          $(".rooms option:selected").map((i, e) => {
+            groupNames.push(e.innerHTML);
+          });
+          connection.invoke("AddClientGroup", groupNames);
+        });
+        let _groupName;
+        $(".rooms").change(function () {
+          let groupName = $(this).val();
+          _groupName = groupName[0];
+          connection.invoke("GetClientGroup", groupName[0]);
+        });
+
+        connection.on("alertMessage", (myClient) => {
+          alert(`${myClient} karakteri zaten bu grupta!!!`);
+        });
+
+        $("#btnGroupMessage").click(() => {
+          const message = $("#txtMesaj").val();
+          if (_groupName === "") {
+            connection.invoke("SendMessageToGroupAsync", _groupName, message);
+          }
+        });
+      });
+    </script>
+    <title>Document</title>
+  </head>
+  <body>
+    <div class="row">
+      <div class="col-md-1"></div>
+      <div class="col-md-10">
+        <div class="row">
+          <!--Sol Menü-->
+          <div class="col-md-3">
+            <input
+              class="form-control form-control-lg disabledElements"
+              type="text"
+              placeholder="Oda Adı"
+              id="txtOdaAdi"
+            />
+            <button
+              type="button"
+              class="btn btn-info rightButton disabledElements"
+              id="btnOdaOlustur"
+            >
+              Oda Olustur
+            </button>
+            <select
+              size="5"
+              style="width: 100%"
+              class="form-select disabledElements rooms"
+              multiple
+            >
+              <option selected value="-1">Odalar</option>
+            </select>
+            <button
+              type="button"
+              class="btn btn-primary rightButton disabledElements"
+              id="btnOdalaraGir"
+            >
+              Seçili Odalara Gir
+            </button>
+            <!--Oda-->
+            <br /><br /><br />
+            <!--Clientlar-->
+            <div class="list-group">
+              <a class="list-group-item list-group-item-action users active"
+                >Tümü</a
+              >
+              <div id="_clients"></div>
+            </div>
+            <!--Clientlar-->
+          </div>
+          <div class="col-md-6">
+            <div
+              class="alert alert-success"
+              id="clientDurumMesajlari"
+              style="display: none"
+            ></div>
+            <!--Mesajlasma-->
+            <textarea
+              class="form-control"
+              style="margin-top: 5px"
+              placeholder="İletilecek yeri buraya giriniz"
+              rows="3"
+              id="txtMesaj"
+            ></textarea>
+            <button
+              type="button"
+              class="btn btn-light rightButton"
+              id="btnGonder"
+            >
+              Gonder
+            </button>
+            <button
+              type="button"
+              class="btn btn-light rightButton"
+              id="btnGroupMessage"
+            >
+              Gruba Gonder
+            </button>
+            <br /><br /><br />
+            <div class="list-group messages">
+              <a
+                class="list-group-item list-group-item-action message"
+                aria-current="true"
+              >
+                <div class="d-flex w-100 justify-content-between">
+                  <h5 class="mb-3"></h5>
+                  <h5 class="mb-2"></h5>
+                </div>
+                <p class="mb-1"></p>
+              </a>
+            </div>
+            <!--Mesajlasma-->
+          </div>
+          <div class="col-md-3">
+            <input
+              class="form-control form-control-lg"
+              type="text"
+              placeholder="Adınız/Nick"
+              id="txtNickName"
+            />
+            <button
+              type="button"
+              class="btn btn-success leftButton"
+              id="btnGirisYap"
+            >
+              Giris Yap
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-1"></div>
+    </div>
+  </body>
+</html>
